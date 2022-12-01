@@ -6,6 +6,13 @@ const isObject = (value) => {
     return typeof value === "object" && value !== null;
 };
 const extend = Object.assign;
+const isArray = Array.isArray;
+// 是否是整数
+const isIntegerKey = (key) => parseInt(key) + "" === key;
+const hasOwn = (target, key) => {
+    return Object.prototype.hasOwnProperty.call(target, key);
+};
+const hasChanged = (oldValue, value) => oldValue !== value;
 
 function effect(fn, options = {}) {
     const effect = createReactiveEffect(fn, options);
@@ -39,7 +46,7 @@ function createReactiveEffect(fn, options) {
     return effect;
 }
 /**
- * 让某个对象中的属性收集当前它对应的effect函数
+ * 让某个对象中的属性【收集】当前它对应的effect函数
  * 一个属性可能对应多个effect，一个effect也可能对应多个属性
  */
 const targetMap = new WeakMap();
@@ -65,7 +72,48 @@ function track(target, type, key) {
     if (!dep.has(activeEffect)) {
         dep.add(activeEffect);
     }
-    console.log(targetMap);
+}
+// 找属性对应的 effect 让其执行（数组、对象）
+function trigger(target, type, key, newValue, oldValue) {
+    console.log(target, type, key, newValue, oldValue);
+    // 如果这个属性没有收集过effect，那不需要做任何操作
+    const depsMap = targetMap.get(target);
+    if (!depsMap)
+        return;
+    // 我要将所有要执行的 effect 全部存到一个新的集合中，最终一起执行
+    const effects = new Set(); // 使用Set结构对effect去重
+    const add = (dep) => {
+        if (dep) {
+            dep.forEach((effect) => effects.add(effect));
+        }
+    };
+    // 1. 如果修改的是数组的length属性
+    if (key === "length" && isArray(target)) {
+        depsMap.forEach((dep, key) => {
+            // 数组 length 属性对应的effect需要重新执行
+            // 如果更改的长度小于收集的索引，那么这个索引收集的effect也需要重新执行
+            if (key === "length" || key >= newValue) {
+                add(dep);
+            }
+        });
+    }
+    else {
+        // 2. 如果是对象
+        if (key !== undefined) {
+            // 这里一定是修改属性
+            // 新增属性不会触发它的effect重新执行（如果是新增的属性，下方的get方法返回undefined），因为新增的属性之前没有出现在effect的fn中，该属性没有收集过effect
+            add(depsMap.get(key));
+        }
+        // 3. 如果修改数组中的某一个索引对应的元素
+        switch (type) {
+            // 如果通过索引增加了数组长度就触发长度的更新
+            case 0 /* TriggerOrTypes.ADD */:
+                if (isArray(target) && isIntegerKey(key)) {
+                    add(depsMap.get("length"));
+                }
+        }
+    }
+    effects.forEach((effect) => effect());
 }
 
 function createGetter(isReadonly = false, shallow = false) {
@@ -94,8 +142,21 @@ function createGetter(isReadonly = false, shallow = false) {
 }
 function createSetter(shallow = false) {
     return function set(target, key, value, receiver) {
-        const result = Reflect.set(target, key, value, receiver);
+        const oldValue = target[key]; // 获取老的值
+        // 当通过索引修改数组元素时hadKey为true，当通过索引新增数组元素时hadKey为false；当修改对象属性时hadKey为true，当新增对象属性时hadKey为false
+        let hadKey = isArray(target) && isIntegerKey(key)
+            ? Number(key) < target.length
+            : hasOwn(target, key);
+        const result = Reflect.set(target, key, value, receiver); // 修改属性
         // 当数据更新时，通知对应属性的所有 effect 重新执行
+        if (!hadKey) {
+            // 通过索引新增数组元素，或新增对象属性时
+            trigger(target, 0 /* TriggerOrTypes.ADD */, key, value);
+        }
+        else if (hasChanged(oldValue, value)) {
+            // 通过索引修改数组元素，或修改对象属性和数组length时
+            trigger(target, 1 /* TriggerOrTypes.SET */, key, value, oldValue);
+        }
         return result;
     };
 }

@@ -1,6 +1,13 @@
-import { extend, isObject } from "@vue/shared";
-import { track } from "./effect";
-import { TrackOpTypes } from "./operators";
+import {
+  extend,
+  hasChanged,
+  hasOwn,
+  isArray,
+  isIntegerKey,
+  isObject,
+} from "@vue/shared";
+import { track, trigger } from "./effect";
+import { TrackOpTypes, TriggerOrTypes } from "./operators";
 import { reactive, readonly } from "./reactive";
 function createGetter(isReadonly = false, shallow = false) {
   // receiver 是代理对象，即 proxy 对象
@@ -28,8 +35,22 @@ function createGetter(isReadonly = false, shallow = false) {
 }
 function createSetter(shallow = false) {
   return function set(target, key, value, receiver) {
-    const result = Reflect.set(target, key, value, receiver);
+    const oldValue = target[key]; // 获取老的值
+    // 当通过索引修改数组元素时hadKey为true，当通过索引新增数组元素时hadKey为false；当修改对象属性时hadKey为true，当新增对象属性时hadKey为false
+    let hadKey =
+      isArray(target) && isIntegerKey(key)
+        ? Number(key) < target.length
+        : hasOwn(target, key);
+    const result = Reflect.set(target, key, value, receiver); // 修改属性
+
     // 当数据更新时，通知对应属性的所有 effect 重新执行
+    if (!hadKey) {
+      // 通过索引新增数组元素，或新增对象属性时
+      trigger(target, TriggerOrTypes.ADD, key, value);
+    } else if (hasChanged(oldValue, value)) {
+      // 通过索引修改数组元素，或修改对象属性和数组length时
+      trigger(target, TriggerOrTypes.SET, key, value, oldValue);
+    }
 
     return result;
   };

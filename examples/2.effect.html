@@ -12,13 +12,13 @@
     <script>
         // 副作用函数
         let { effect, reactive } = VueReactivity;
-        let state = reactive({name: 'zf', age: 12})
+        let state = reactive({name: 'zf', age: 12, arr:[1,2,3]})
         // let app = document.querySelector('#app')
         effect(() => {
-            app.innerHTML = state.name + '今年' + state.age + '岁了'
+            app.innerHTML = state.arr
         })
         setTimeout(() => {
-            state.age++
+            state.arr.push(7)
         },1000)
     </script>
 </body>
