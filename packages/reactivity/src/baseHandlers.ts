@@ -1,4 +1,6 @@
 import { extend, isObject } from "@vue/shared";
+import { track } from "./effect";
+import { TrackOpTypes } from "./operators";
 import { reactive, readonly } from "./reactive";
 function createGetter(isReadonly = false, shallow = false) {
   // receiver 是代理对象，即 proxy 对象
@@ -11,7 +13,8 @@ function createGetter(isReadonly = false, shallow = false) {
      */
     const res = Reflect.get(target, key, receiver);
     if (!isReadonly) {
-      // TODO。。。收集依赖
+      // 执行effect的fn时会取值，此时将对应的 effect 收集起来
+      track(target, TrackOpTypes.GET, key);
     }
     if (shallow) {
       return res;
@@ -26,6 +29,8 @@ function createGetter(isReadonly = false, shallow = false) {
 function createSetter(shallow = false) {
   return function set(target, key, value, receiver) {
     const result = Reflect.set(target, key, value, receiver);
+    // 当数据更新时，通知对应属性的所有 effect 重新执行
+
     return result;
   };
 }

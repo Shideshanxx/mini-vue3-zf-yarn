@@ -7,12 +7,12 @@
     <title>reactive</title>
 </head>
 <body>
-    <script src="../node_modules/@vue/reactivity/dist//reactivity.global.js"></script>
+    <script src="../node_modules/@vue/reactivity/dist/reactivity.global.js"></script>
     <script>
         let { reactive, shallowReactive, readonly, shallowReadonly } = VueReactivity
-        let state = shallowReadonly({name:'zf',age:{n:11}})
+        let state = reactive({name:'zf',age:{n:11}})
         console.log(state.age)
-        state.age.n = 111
+        state.age.n = 22
     </script>
 </body>
 </html>
